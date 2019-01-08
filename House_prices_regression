@@ -1,0 +1,229 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+
+df_train = pd.read_csv('../input/train.csv')
+df_test = pd.read_csv('../input/test.csv')
+
+
+z= list(set(df_train.columns) - set(df_test.columns))
+op=pd.DataFrame(df_train[z])
+
+df_train=df_train.drop([z[0]],axis=1)
+
+df_train['name']=0
+df_test['name']=1
+
+df_train=pd.concat([df_train,df_test])
+
+
+'''$$$$$$$$$$$$$$$$$$$ GETTING ALL EMPTY VALUES $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+empty=pd.DataFrame(columns=['name','count','percent'])
+
+for each in df_train.columns:
+    empty['name']=each
+    empty['count']=df_train[each].isnull().sum()
+    empty['percent']=(df_train.isnull().sum()/df_train.shape[0])*100
+
+empty=df_train.isnull().sum().sort_values(ascending = False)
+per=((df_train.isnull().sum()/df_train.shape[0])*100).sort_values(ascending=False)
+
+md=pd.concat([empty,per],axis=1)
+
+
+'''$$$$$$$$$$$$$$$$$$$ REMOVING ALL EMPTY VALUES $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+
+
+to_del=md.loc[md[1]>60]
+
+d=to_del.index
+df_train_temp=df_train.drop(d,axis=1)
+
+z=df_train_temp.isnull().sum().sort_values(ascending = False)
+
+
+z=z.loc[z.values!=0]
+
+for each in z.index:
+    print(df_train_temp[each].dtype,'null count', df_train_temp[each].isnull().sum() ,'unique_count' ,df_train_temp[each].nunique(),  df_train_temp[each].value_counts().head(3), each)
+
+for each in z.index:
+    df_train_temp[each]=df_train_temp[each].fillna(df_train_temp[each].mode()[0])
+
+df_train=df_train_temp
+
+df_train_temp.isnull().sum().sort_values(ascending=False)
+
+'''$$$$$$$$$$$$$$$$$$$ FIXING STUCURAL ERROR $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+df=pd.DataFrame()
+for each in df_train_temp.columns:
+    if df_train_temp[each].dtype=='O':
+        #df[each]=df_train_temp[each] 
+        df_train_temp[each]=df_train_temp[each].str.lower()
+
+
+df_train=df_train_temp
+
+
+'''$$$$$$$$$$$$$$$$$$$ FINDING DUPLICATES $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+df_train.duplicated().sum()
+
+'''$$$$$$$$$$$$$$$$$$$ REMOVING LESS CORRELATED DATA WITH OP  $$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+id=pd.DataFrame(df_train['Id'])
+nam=pd.DataFrame(df_train['name'])
+
+for each in df_train.columns:
+    if (df_train[each]).dtype!='O':
+        print(abs((df_train[each].corr(op['SalePrice']))))
+        if abs((df_train[each].corr(op['SalePrice']))) < 0.05 :
+            print (each)
+            df_train=df_train.drop([each],axis=1)
+            
+df_train['Id']=id['Id']
+df_train['name']=nam['name']
+df_train.columns
+df_train_temp=df_train
+$$$$$$$$$$$$$$$$$$$ ENCODING OF DATA  $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+from sklearn.preprocessing import LabelEncoder,OneHotEncoder
+
+
+
+for each in df_train_temp.columns:
+    if df_train[each].dtype=='O':
+        print (each)
+        le=LabelEncoder()
+        df_train_temp[each]=le.fit_transform(df_train_temp[each])
+        
+df_train_temp.info()   
+df_train=df_train_temp
+
+'''$$$$$$$$$$$$$$$$$$$ NAME AS INDEX FOR DATA SPLITTING TRAIN AND TEST  $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+df_train_temp['name'].nunique()
+
+df_train_temp=df_train_temp.set_index('name')
+df_train=df_train_temp
+
+'''$$$$$$$$$$$$$$$$$$$ FINDING SKEWNESS IN DATA  $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+
+#for each in df_train_temp.columns[:5]:
+#    print(each,df_train_temp[each].skew())
+    
+#res1=list(map(lambda x : [(df_train_temp[x].skew()),x],df_train_temp.columns))
+# to get all the columns having skewed data
+res=list(filter (lambda x: -1<x[0]>2,list(map(lambda x : [(df_train_temp[x].skew()),x],df_train_temp.columns))))
+
+res=pd.DataFrame(res)
+res.sort_values(0,ascending = False)
+
+
+'''$$$$$$$$$$$$$$$$$$$ APPLYING log TRANSFORMATION IN DATA to avoide skewing  $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+
+import numpy as np
+for each in res[1]:
+    print(each)
+    df_train_temp[each]=np.log(df_train_temp[each])
+    
+df_train=df_train_temp
+
+'''$$$$$$$$$$$$$$$$$$$ DROPPING UNWANTED COLOMS $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+ID=df_train['Id']
+df_train=df_train.drop(['Id'],axis=1)
+    
+
+'''$$$$$$$$$$$$$$$$$$$ SPLITTING TRAIN TEST DATA $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+test=df_train.loc[df_train.index==1]
+test.shape
+df_test.shape
+
+train=df_train.loc[df_train.index==0]
+train.shape
+
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split( train.as_matrix(), op.as_matrix(), test_size=0.33, random_state=42)
+
+
+'''$$$$$$$$$$$$$$$$$$$ model xgboost $$$$$$$$$$$$$$$$$$$$$$$$$$$$
+from xgboost import XGBRegressor
+my_model = XGBRegressor(n_estimators=5000, learning_rate=0.005)
+my_model.fit(X_train, y_train, verbose=False)
+
+# it should be like this but early stopping is giving some error
+#my_model.fit(X_train, y_train,  early_stopping_rounds=5,verbose=False)
+
+predictions = my_model.predict(X_test)
+
+from sklearn.metrics import mean_absolute_error
+print("Mean Absolute Error : " + str(mean_absolute_error(predictions, y_test)))
+
+ 
+test=test.as_matrix()
+sub=pd.DataFrame()
+sub['Id']=df_test['Id']
+res=my_model.predict(test)
+sub['SalePrice']=res 
+
+sub.to_csv('submission.csv',index=False)
+
+
+$$$$$$$$$$$$$$$$$$$ model xgboost $$$$$$$$$$$$$$$$$$$$$$$$$$$$
+import xgboost
+xgb = xgboost.XGBRegressor(n_estimators=100, learning_rate=0.08, gamma=0, subsample=0.75,colsample_bytree=1, max_depth=7)
+
+xgdmat=xgb.DMatrix(X_train,y_train)
+our_params={'eta':0.1,'seed':0,'subsample':0.8,'colsample_bytree':0.8,'objective':'reg:linear','max_depth':3,'min_child_weight':1}
+final_gb=xgb.train(our_params,xgdmat)
+tesdmat=xgb.DMatrix(X_test)
+y_pred=final_gb.predict(tesdmat)
+
+$$$$$$$$$$$$$$$$$$$ model xgboost evaluation $$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+from sklearn.metrics import mean_squared_error
+import math
+testScore=math.sqrt(mean_squared_error(y_test.values,y_pred))
+print(testScore)
+
+
+$$$$$$$$$$$$$$$$$$$NN Model $$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+import keras
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasRegressor
+
+df_train.shape[1]
+
+model=Sequential()
+model.add(Dense(128,input_dim = df_train.shape[1],kernel_initializer='normal',activation='relu'))
+
+model.add(Dense(256, kernel_initializer='normal',activation='relu'))
+model.add(Dense(256, kernel_initializer='normal',activation='relu'))
+
+model.add(Dense(1, kernel_initializer='normal',activation='linear'))
+
+model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
+model.summary()
+
+model.fit(X_train, y_train, epochs=500, batch_size=32, validation_split = 0.2)
+
+test=test.as_matrix()
+
+test.shape
+sub['Id']=df_test['Id']
+res=my_model.predict(test)
+sub['SalePrice']=res 
+
+sub.to_csv('submission.csv',index=False)
+'''$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$'''
+
+
+print('done')
