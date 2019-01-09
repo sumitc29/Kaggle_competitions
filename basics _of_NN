@@ -1,0 +1,9 @@
+# First layer for ANN 
+
+model.add(Dense(units=128,input_dim = 11,kernel_initializer='normal',activation='relu'))
+
+1  Units/Output_dim== this are the number of nodes associated with the first layer
+1.1 Ideal value of units ==avg(input and output)
+2 input_dim== number / count of independent feaures in the dataset
+3 kernel initializeer== this are the nominal weights associated with each of the node as the get changed after ilterations
+4 Activation you know vwery well
