@@ -7,3 +7,5 @@ model.add(Dense(units=128,input_dim = 11,kernel_initializer='normal',activation=
 2 input_dim== number / count of independent feaures in the dataset
 3 kernel initializeer== this are the nominal weights associated with each of the node as the get changed after ilterations
 4 Activation you know vwery well
+5 batch size :  these are the number of instances after which our weights get modified
+6: eoches number of ilteration of whole data over neural network
